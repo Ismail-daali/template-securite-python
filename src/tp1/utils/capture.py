@@ -1,4 +1,4 @@
-from scapy.all import rdpcap, TCP, UDP, ICMP, ARP
+from scapy.all import rdpcap, TCP, UDP, ICMP, ARP, IP, DNS
 from tp1.utils.lib import choose_interface
 from tp1.utils.config import logger
 
@@ -33,11 +33,17 @@ class Capture:
         udp = 0
         icmp = 0
         arp = 0
+        ip = 0
+        dns = 0
+        http = 0
 
         for packet in self.packets:
 
             if TCP in packet:
                 tcp = tcp + 1
+
+                if packet[TCP].sport == 80 or packet[TCP].dport == 80:
+                    http = http + 1
 
             if UDP in packet:
                 udp = udp + 1
@@ -48,10 +54,19 @@ class Capture:
             if ARP in packet:
                 arp = arp + 1
 
+            if IP in packet:
+                ip = ip + 1
+
+            if DNS in packet:
+                dns = dns + 1
+
         resultat = "TCP: " + str(tcp)
         resultat = resultat + " UDP: " + str(udp)
         resultat = resultat + " ICMP: " + str(icmp)
         resultat = resultat + " ARP: " + str(arp)
+        resultat = resultat + " IP: " + str(ip)
+        resultat = resultat + " DNS: " + str(dns)
+        resultat = resultat + " HTTP: " + str(http)
 
         return resultat
 
@@ -65,11 +80,17 @@ class Capture:
         udp_trouver = False
         icmp_trouver = False
         arp_trouver = False
+        ip_trouver = False
+        dns_trouver = False
+        http_trouver = False
 
         for packet in self.packets:
 
             if TCP in packet:
                 tcp_trouver = True
+
+                if packet[TCP].sport == 80 or packet[TCP].dport == 80:
+                    http_trouver = True
 
             if UDP in packet:
                 udp_trouver = True
@@ -79,6 +100,12 @@ class Capture:
 
             if ARP in packet:
                 arp_trouver = True
+
+            if IP in packet:
+                ip_trouver = True
+
+            if DNS in packet:
+                dns_trouver = True
 
         if tcp_trouver == True:
             resultat = resultat + "TCP "
@@ -91,6 +118,15 @@ class Capture:
 
         if arp_trouver == True:
             resultat = resultat + "ARP "
+
+        if ip_trouver == True:
+            resultat = resultat + "IP "
+
+        if dns_trouver == True:
+            resultat = resultat + "DNS "
+
+        if http_trouver == True:
+            resultat = resultat + "HTTP "
 
         return resultat
 
