@@ -1,4 +1,5 @@
 import re
+from collections import Counter, defaultdict
 
 from scapy.all import ARP, DNS, ICMP, IP, TCP, UDP, Ether, Raw, rdpcap
 
@@ -16,7 +17,6 @@ class Capture:
 
         self.summary = ""
         self.packets = []
-
         self.protocol_counts = {}
         self.attacks = []
         self.flag = ""
@@ -165,7 +165,7 @@ class Capture:
 
         self.sort_network_protocols()
 
-        arp_table = {}
+        arp_table = defaultdict(Counter)
         scan_ports = {}
 
         sqli_patterns = [
@@ -180,13 +180,9 @@ class Capture:
             # ARP SPOOFING
             if ARP in packet and packet[ARP].op == 2:
                 ip_source = packet[ARP].psrc
-                mac_source = packet[ARP].hwsrc
+                mac_source = packet[ARP].hwsrc.lower()
 
-                if ip_source not in arp_table:
-                    arp_table[ip_source] = []
-
-                if mac_source not in arp_table[ip_source]:
-                    arp_table[ip_source].append(mac_source)
+                arp_table[ip_source][mac_source] += 1
 
             # PORT SCAN
             if IP in packet and TCP in packet and packet[TCP].flags == "S":
@@ -229,7 +225,7 @@ class Capture:
         # RESULTAT ARP SPOOFING
         for ip_source, macs in arp_table.items():
             if len(macs) > 1:
-                mac_attaquant = macs[1]
+                mac_attaquant = macs.most_common(1)[0][0]
 
                 attaque = {
                     "type": "arp_spoofing",

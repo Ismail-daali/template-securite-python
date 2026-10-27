@@ -89,7 +89,6 @@ def test_detect_port_scan():
 
     for port in range(20, 35):
         paquet = Ether() / IP(src="10.0.0.5", dst="10.0.0.10") / TCP(dport=port, flags="S")
-
         capture.packets.append(paquet)
 
     capture.analyse()
@@ -98,16 +97,81 @@ def test_detect_port_scan():
 
 
 def test_detect_arp_spoofing():
+    """Détecter une MAC qui envoie davantage de réponses ARP."""
     capture = Capture(pcap_path="test.pcap")
 
     capture.packets = [
-        Ether() / ARP(op=2, psrc="192.168.1.1", hwsrc="aa:aa:aa:aa:aa:aa"),
-        Ether() / ARP(op=2, psrc="192.168.1.1", hwsrc="bb:bb:bb:bb:bb:bb"),
+        Ether()
+        / ARP(
+            op=2,
+            psrc="192.168.1.1",
+            hwsrc="aa:aa:aa:aa:aa:aa",
+        ),
+        Ether()
+        / ARP(
+            op=2,
+            psrc="192.168.1.1",
+            hwsrc="bb:bb:bb:bb:bb:bb",
+        ),
+        Ether()
+        / ARP(
+            op=2,
+            psrc="192.168.1.1",
+            hwsrc="bb:bb:bb:bb:bb:bb",
+        ),
+        Ether()
+        / ARP(
+            op=2,
+            psrc="192.168.1.1",
+            hwsrc="bb:bb:bb:bb:bb:bb",
+        ),
     ]
 
     capture.analyse()
 
-    assert {"type": "arp_spoofing", "attacker": "bb:bb:bb:bb:bb:bb"} in capture.attacks
+    assert {
+        "type": "arp_spoofing",
+        "attacker": "bb:bb:bb:bb:bb:bb",
+    } in capture.attacks
+
+
+def test_detect_arp_spoofing_attacker_first():
+    """Détecter une MAC suspecte même si elle apparaît en premier."""
+    capture = Capture(pcap_path="test.pcap")
+
+    capture.packets = [
+        Ether()
+        / ARP(
+            op=2,
+            psrc="192.168.1.1",
+            hwsrc="bb:bb:bb:bb:bb:bb",
+        ),
+        Ether()
+        / ARP(
+            op=2,
+            psrc="192.168.1.1",
+            hwsrc="aa:aa:aa:aa:aa:aa",
+        ),
+        Ether()
+        / ARP(
+            op=2,
+            psrc="192.168.1.1",
+            hwsrc="bb:bb:bb:bb:bb:bb",
+        ),
+        Ether()
+        / ARP(
+            op=2,
+            psrc="192.168.1.1",
+            hwsrc="bb:bb:bb:bb:bb:bb",
+        ),
+    ]
+
+    capture.analyse()
+
+    assert {
+        "type": "arp_spoofing",
+        "attacker": "bb:bb:bb:bb:bb:bb",
+    } in capture.attacks
 
 
 def test_detect_sql_injection():
@@ -129,7 +193,10 @@ def test_detect_sql_injection():
 def test_ethernet():
     capture = Capture(pcap_path="test.pcap")
 
-    capture.packets = [Ether() / IP() / TCP(dport=80), Ether() / ARP()]
+    capture.packets = [
+        Ether() / IP() / TCP(dport=80),
+        Ether() / ARP(),
+    ]
 
     capture.sort_network_protocols()
 
