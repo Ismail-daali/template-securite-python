@@ -1,29 +1,93 @@
-# Template code Sécurité Python
 
-## Description
+from unittest.mock import MagicMock
+from src.tp1.utils.report import Report
 
-Projet contenant les modèles de TP pour le cours de sécurité Python de 4e année de l'ESGI.
 
-## Installation
+def test_report_init():
+    capture = MagicMock()
+    report = Report(capture, "test.pdf", "Test summary")
 
-Faire un fork puis un clone du projet :
+    assert report.capture == capture
+    assert report.filename == "test.pdf"
+    assert report.summary == "Test summary"
+    assert report.title == "Rapport IDS / IPS"
 
-```bash
-git clone git@github.com:<VotreNom>/template-securite-python.git
-```
 
-Installer les dépendances :
+def test_concat_report():
+    report = Report(MagicMock(), "test.pdf", "Test summary")
+    report.title = "Test Title"
+    report.array = "Test Array"
+    report.graph = "Test Graph"
 
-```bash
-cd template-securite-python
-poetry lock
-poetry install
-```
+    result = report.concat_report()
 
-## Utilisation
+    assert "Test Title" in result
+    assert "Test summary" in result
+    assert "Test Array" in result
 
-Lancer le projet :
 
-```bash
-poetry run tp1
-```
+def test_save(tmp_path):
+    capture = MagicMock()
+    capture.protocol_counts = {
+        "TCP": 10,
+        "UDP": 5,
+        "ARP": 2
+    }
+
+    fichier = tmp_path / "test.pdf"
+
+    report = Report(capture, str(fichier), "Test summary")
+    report.generate("graph")
+    report.generate("array")
+    report.save(str(fichier))
+
+    assert fichier.exists()
+    assert fichier.stat().st_size > 0
+
+    with open(fichier, "rb") as f:
+        assert f.read(4) == b"%PDF"
+
+
+def test_generate_graph():
+    report = Report(MagicMock(), "test.pdf", "Test summary")
+
+    report.generate("graph")
+
+    assert report.graph is True
+
+
+def test_generate_array():
+    capture = MagicMock()
+    capture.protocol_counts = {"TCP": 5, "UDP": 2}
+
+    report = Report(capture, "test.pdf", "Test summary")
+    report.generate("array")
+
+    assert "TCP" in report.array
+    assert "UDP" in report.array
+
+
+def test_generate_invalid_param():
+    report = Report(MagicMock(), "test.pdf", "Test summary")
+
+    report.generate("invalid")
+
+    assert report.graph is False
+    assert report.array == ""
+
+
+def test_get_stats():
+    capture = MagicMock()
+    capture.protocol_counts = {"Ethernet": 3, "TCP": 2}
+    report = Report(capture, "test.pdf", "Résumé")
+    assert report.get_stats() == {"Ethernet": 3, "TCP": 2}
+
+
+def test_save_uses_requested_filename(tmp_path):
+    capture = MagicMock()
+    capture.protocol_counts = {"Ethernet": 2, "TCP": 1}
+    report = Report(capture, "old.pdf", "Résumé")
+    target = tmp_path / "new.pdf"
+    report.generate("array")
+    report.save(str(target))
+    assert target.read_bytes().startswith(b"%PDF")

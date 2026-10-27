@@ -1,88 +1,137 @@
 from unittest.mock import patch
+
+from scapy.all import ARP, IP, TCP, Ether, Raw
+
 from src.tp1.utils.capture import Capture
 
 
 def test_capture_init():
-    # When
-    capture = Capture()
+    capture = Capture(pcap_path="test.pcap")
 
-    # Then
-    assert capture.interface == ""
+    assert capture.pcap_path == "test.pcap"
     assert capture.summary == ""
+    assert len(capture.packets) == 0
+    assert capture.attacks == []
 
 
-def test_given_capture_when_capture_traffic_then_interface_is_set():
-    # Given
-    capture = Capture()
+def test_capture_traffic(tmp_path):
+    from scapy.all import wrpcap
 
-    # When
+    fichier = tmp_path / "test.pcap"
+    paquet = Ether() / IP(src="10.0.0.1", dst="10.0.0.2") / TCP(dport=80)
+    wrpcap(str(fichier), [paquet])
+
+    capture = Capture(pcap_path=str(fichier))
     capture.capture_traffic()
 
-    # Then
-    # This is a minimal test since the method doesn't do much yet
-    assert capture.interface == ""
+    assert len(capture.packets) == 1
 
 
 def test_sort_network_protocols():
-    # Given
-    capture = Capture()
+    capture = Capture(pcap_path="test.pcap")
 
-    # When
+    capture.packets = [
+        Ether() / IP() / TCP(dport=80),
+        Ether() / IP() / TCP(dport=443),
+        Ether() / ARP(),
+    ]
+
     result = capture.sort_network_protocols()
 
-    # Then
-    assert result == ""  # Method currently returns None
+    assert capture.protocol_counts["TCP"] == 2
+    assert capture.protocol_counts["ARP"] == 1
+    assert capture.protocol_counts["IP"] == 2
+    assert capture.protocol_counts["HTTP"] == 1
+    assert "TCP: 2" in result
 
 
 def test_get_all_protocols():
-    # Given
-    capture = Capture()
+    capture = Capture(pcap_path="test.pcap")
+    capture.packets = [Ether() / IP() / TCP(dport=80), Ether() / ARP()]
 
-    # When
     result = capture.get_all_protocols()
 
-    # Then
-    assert result == ""  # Method currently returns None
+    assert "TCP" in result
+    assert "IP" in result
+    assert "ARP" in result
+    assert "HTTP" in result
 
 
 def test_analyse():
-    # Given
-    capture = Capture()
+    capture = Capture(pcap_path="test.pcap")
 
-    # When
-    with (
-        patch.object(capture, "get_all_protocols") as mock_get_protocols,
-        patch.object(capture, "sort_network_protocols") as mock_sort,
-        patch.object(capture, "_gen_summary") as mock_gen_summary,
-    ):
-        mock_gen_summary.return_value = "Test summary"
+    with patch.object(capture, "_gen_summary", return_value="Test summary"):
         capture.analyse("tcp")
 
-    # Then
-    mock_get_protocols.assert_called_once()
-    mock_sort.assert_called_once()
-    mock_gen_summary.assert_called_once()
     assert capture.summary == "Test summary"
+    assert capture.attacks == []
 
 
 def test_get_summary():
-    # Given
-    capture = Capture()
+    capture = Capture(pcap_path="test.pcap")
     capture.summary = "Test summary"
 
-    # When
-    result = capture.get_summary()
-
-    # Then
-    assert result == "Test summary"
+    assert capture.get_summary() == "Test summary"
 
 
 def test_gen_summary():
-    # Given
-    capture = Capture()
+    capture = Capture(pcap_path="test.pcap")
 
-    # When
     result = capture._gen_summary()
 
-    # Then
-    assert result == ""  # Method currently returns empty string
+    assert "Protocoles" in result
+    assert "TCP: 0" in result
+    assert "Flag" in result
+
+
+def test_detect_port_scan():
+    capture = Capture(pcap_path="test.pcap")
+
+    for port in range(20, 35):
+        paquet = Ether() / IP(src="10.0.0.5", dst="10.0.0.10") / TCP(dport=port, flags="S")
+
+        capture.packets.append(paquet)
+
+    capture.analyse()
+
+    assert {"type": "port_scan", "attacker": "10.0.0.5"} in capture.attacks
+
+
+def test_detect_arp_spoofing():
+    capture = Capture(pcap_path="test.pcap")
+
+    capture.packets = [
+        Ether() / ARP(op=2, psrc="192.168.1.1", hwsrc="aa:aa:aa:aa:aa:aa"),
+        Ether() / ARP(op=2, psrc="192.168.1.1", hwsrc="bb:bb:bb:bb:bb:bb"),
+    ]
+
+    capture.analyse()
+
+    assert {"type": "arp_spoofing", "attacker": "bb:bb:bb:bb:bb:bb"} in capture.attacks
+
+
+def test_detect_sql_injection():
+    capture = Capture(pcap_path="test.pcap")
+
+    paquet = (
+        Ether()
+        / IP(src="10.0.0.9", dst="10.0.0.10")
+        / TCP(dport=80)
+        / Raw(load=b"GET /login?user=' OR 1=1 HTTP/1.1")
+    )
+
+    capture.packets = [paquet]
+    capture.analyse()
+
+    assert {"type": "sql_injection", "attacker": "10.0.0.9"} in capture.attacks
+
+
+def test_ethernet():
+    capture = Capture(pcap_path="test.pcap")
+
+    capture.packets = [Ether() / IP() / TCP(dport=80), Ether() / ARP()]
+
+    capture.sort_network_protocols()
+
+    assert capture.protocol_counts["Ethernet"] == 2
+    assert "Ethernet" in capture.get_all_protocols()

@@ -1,84 +1,89 @@
-from unittest.mock import patch, mock_open, MagicMock
+from unittest.mock import MagicMock
+
 from src.tp1.utils.report import Report
 
 
 def test_report_init():
-    # Given
     capture = MagicMock()
-    filename = "test.pdf"
-    summary = "Test summary"
+    report = Report(capture, "test.pdf", "Test summary")
 
-    # When
-    report = Report(capture, filename, summary)
-
-    # Then
     assert report.capture == capture
-    assert report.filename == filename
-    assert report.title == "TITRE DU RAPPORT"
-    assert report.summary == summary
-    assert report.array == ""
-    assert report.graph == ""
+    assert report.filename == "test.pdf"
+    assert report.summary == "Test summary"
+    assert report.title == "Rapport IDS / IPS"
 
 
 def test_concat_report():
-    # Given
     report = Report(MagicMock(), "test.pdf", "Test summary")
     report.title = "Test Title"
     report.array = "Test Array"
     report.graph = "Test Graph"
 
-    # When
     result = report.concat_report()
 
-    # Then
-    assert result == "Test TitleTest summaryTest ArrayTest Graph"
+    assert "Test Title" in result
+    assert "Test summary" in result
+    assert "Test Array" in result
 
 
-def test_save():
-    # Given
-    report = Report(MagicMock(), "test.pdf", "Test summary")
-    report.title = "Test Title"
+def test_save(tmp_path):
+    capture = MagicMock()
+    capture.protocol_counts = {"TCP": 10, "UDP": 5, "ARP": 2}
 
-    # When/Then
-    with patch("builtins.open", mock_open()) as mock_file:
-        report.save("test.pdf")
+    fichier = tmp_path / "test.pdf"
 
-        # Verify file was opened with correct name
-        mock_file.assert_called_once_with("test.pdf", "w")
+    report = Report(capture, str(fichier), "Test summary")
+    report.generate("graph")
+    report.generate("array")
+    report.save(str(fichier))
 
-        # Verify write was called with the concatenated content
-        mock_file().write.assert_called_once_with("Test TitleTest summary")
+    assert fichier.exists()
+    assert fichier.stat().st_size > 0
+
+    with open(fichier, "rb") as f:
+        assert f.read(4) == b"%PDF"
 
 
 def test_generate_graph():
-    # Given
     report = Report(MagicMock(), "test.pdf", "Test summary")
 
-    # When
     report.generate("graph")
 
-    # Then
-    assert report.graph == ""  # Currently returns empty string
+    assert report.graph is True
 
 
 def test_generate_array():
-    # Given
-    report = Report(MagicMock(), "test.pdf", "Test summary")
+    capture = MagicMock()
+    capture.protocol_counts = {"TCP": 5, "UDP": 2}
 
-    # When
+    report = Report(capture, "test.pdf", "Test summary")
     report.generate("array")
 
-    # Then
-    assert report.array == ""  # Currently returns empty string
+    assert "TCP" in report.array
+    assert "UDP" in report.array
 
 
 def test_generate_invalid_param():
-    # Given
     report = Report(MagicMock(), "test.pdf", "Test summary")
 
-    # When
     report.generate("invalid")
 
-    # Then
-    assert report.graph == ""
+    assert report.graph is False
     assert report.array == ""
+
+
+def test_get_stats():
+    capture = MagicMock()
+    capture.protocol_counts = {"Ethernet": 3, "TCP": 2}
+    report = Report(capture, "test.pdf", "Résumé")
+    assert report.get_stats() == {"Ethernet": 3, "TCP": 2}
+
+
+def test_save_uses_requested_filename(tmp_path):
+    capture = MagicMock()
+    capture.protocol_counts = {"Ethernet": 2, "TCP": 1}
+    report = Report(capture, "old.pdf", "Résumé")
+    target = tmp_path / "new.pdf"
+    report.generate("array")
+    report.save(str(target))
+    assert target.read_bytes().startswith(b"%PDF")

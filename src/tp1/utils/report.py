@@ -1,12 +1,12 @@
 from fpdf import FPDF
-from scapy.all import TCP, UDP, ICMP, ARP, IP, DNS
 
 from tp1.utils.capture import Capture
 
 
 class Report:
+    """Construit un rapport PDF à partir des résultats de Capture."""
 
-    def __init__(self, capture: Capture, filename: str, summary: str):
+    def __init__(self, capture: Capture, filename: str, summary: str) -> None:
         self.capture = capture
         self.filename = filename
         self.title = "Rapport IDS / IPS"
@@ -14,144 +14,54 @@ class Report:
         self.array = ""
         self.graph = False
 
-    def get_stats(self):
-        """
-        recuperer les statistiques des protocoles
-        """
-        stats = {
-            "TCP": 0,
-            "UDP": 0,
-            "ICMP": 0,
-            "ARP": 0,
-            "IP": 0,
-            "DNS": 0,
-            "HTTP": 0
-        }
-
-        for packet in self.capture.packets:
-
-            if TCP in packet:
-                stats["TCP"] = stats["TCP"] + 1
-
-                if packet[TCP].sport == 80 or packet[TCP].dport == 80:
-                    stats["HTTP"] = stats["HTTP"] + 1
-
-            if UDP in packet:
-                stats["UDP"] = stats["UDP"] + 1
-
-            if ICMP in packet:
-                stats["ICMP"] = stats["ICMP"] + 1
-
-            if ARP in packet:
-                stats["ARP"] = stats["ARP"] + 1
-
-            if IP in packet:
-                stats["IP"] = stats["IP"] + 1
-
-            if DNS in packet:
-                stats["DNS"] = stats["DNS"] + 1
-
-        return stats
+    def get_stats(self) -> dict[str, int]:
+        """Utilise les mêmes statistiques que le rapport JSON."""
+        return self.capture.protocol_counts.copy()
 
     def concat_report(self) -> str:
-        """
-        regrouper les informations du rapport
-        """
-        content = ""
-        content += self.title + "\n"
-        content += self.summary + "\n"
-        content += self.array
-
-        return content
-
-    def save(self, filename: str) -> None:
-        """
-        sauvegarder le rapport en PDF
-        """
-        pdf = FPDF()
-        pdf.add_page()
-
-        pdf.set_font("Arial", "B", 18)
-        pdf.cell(0, 10, self.title, ln=True)
-
-        pdf.ln(5)
-
-        pdf.set_font("Arial", "", 11)
-        pdf.multi_cell(0, 8, self.summary)
-
-        pdf.ln(5)
-
-        pdf.set_font("Arial", "B", 14)
-        pdf.cell(0, 10, "Statistiques des protocoles", ln=True)
-
-        pdf.set_font("Arial", "", 11)
-        pdf.multi_cell(0, 8, self.array)
-
-        if self.graph == True:
-
-            pdf.ln(5)
-
-            pdf.set_font("Arial", "B", 14)
-            pdf.cell(0, 10, "Graphique", ln=True)
-
-            stats = self.get_stats()
-
-            protocoles = list(stats.keys())
-            nombres = list(stats.values())
-
-            maximum = max(nombres)
-
-            x = 25
-            y_base = 250
-            largeur = 15
-
-            for i in range(len(protocoles)):
-
-                hauteur = (nombres[i] / maximum) * 60
-
-                pdf.rect(
-                    x,
-                    y_base - hauteur,
-                    largeur,
-                    hauteur,
-                    style="F"
-                )
-
-                pdf.set_font("Arial", "", 8)
-
-                pdf.set_xy(x, y_base + 2)
-                pdf.cell(largeur, 5, protocoles[i], align="C")
-
-                pdf.set_xy(x, y_base - hauteur - 5)
-                pdf.cell(
-                    largeur,
-                    5,
-                    str(nombres[i]),
-                    align="C"
-                )
-
-                x = x + 23
-
-        pdf.output(self.filename)
+        """Assemble la version texte du rapport."""
+        return f"{self.title}\n{self.summary}\n{self.array}"
 
     def generate(self, param: str) -> None:
-        """
-        generer le graphique et le tableau
-        """
-
+        """Prépare le tableau ou active le graphique."""
         if param == "graph":
             self.graph = True
-
         elif param == "array":
+            self.array = "".join(f"{name} : {count}\n" for name, count in self.get_stats().items())
 
+    def save(self, filename: str) -> None:
+        """Enregistre le PDF, y compris quand la capture est vide."""
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Helvetica", "B", 18)
+        pdf.cell(0, 10, self.title, new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(5)
+        pdf.set_font("Helvetica", "", 11)
+        pdf.multi_cell(0, 8, self.summary)
+        pdf.ln(5)
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.cell(0, 10, "Statistiques des protocoles", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", "", 11)
+        pdf.multi_cell(0, 8, self.array)
+
+        if self.graph:
             stats = self.get_stats()
-
-            array = ""
-
-            for protocole in stats:
-                array += protocole
-                array += " : "
-                array += str(stats[protocole])
-                array += "\n"
-
-            self.array = array
+            pdf.ln(5)
+            pdf.set_font("Helvetica", "B", 14)
+            pdf.cell(0, 10, "Graphique", new_x="LMARGIN", new_y="NEXT")
+            if stats:
+                maximum = max(stats.values(), default=0)
+                largeur = min(15, 155 / len(stats))
+                pas = 170 / len(stats)
+                y_base = min(250, pdf.get_y() + 75)
+                for i, (name, count) in enumerate(stats.items()):
+                    x = 20 + i * pas
+                    hauteur = 60 * count / maximum if maximum else 0
+                    if hauteur:
+                        pdf.rect(x, y_base - hauteur, largeur, hauteur, style="F")
+                    pdf.set_font("Helvetica", "", 8)
+                    pdf.set_xy(x - 2, y_base + 2)
+                    pdf.cell(largeur + 4, 5, name, align="C")
+                    pdf.set_xy(x - 2, y_base - hauteur - 5)
+                    pdf.cell(largeur + 4, 5, str(count), align="C")
+        pdf.output(filename)

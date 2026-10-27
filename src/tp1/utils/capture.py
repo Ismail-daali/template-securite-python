@@ -1,14 +1,13 @@
 import re
 
-from scapy.all import rdpcap, TCP, UDP, ICMP, ARP, IP, DNS, Raw
+from scapy.all import ARP, DNS, ICMP, IP, TCP, UDP, Ether, Raw, rdpcap
 
-from tp1.utils.lib import choose_interface
 from tp1.utils.config import logger
+from tp1.utils.lib import choose_interface
 
 
 class Capture:
-
-    def __init__(self, pcap_path=None):
+    def __init__(self, pcap_path: str | None = None) -> None:
         self.pcap_path = pcap_path
         self.interface = None
 
@@ -22,37 +21,23 @@ class Capture:
         self.attacks = []
         self.flag = ""
 
-    def capture_traffic(self):
-        """
-        Lire le fichier PCAP
-        """
+    def capture_traffic(self) -> None:
+        """Lire le fichier PCAP."""
         try:
             if self.pcap_path:
                 self.packets = rdpcap(self.pcap_path)
 
-                logger.info(
-                    "Capture PCAP chargée : " + str(self.pcap_path)
-                )
-
-                logger.info(
-                    "Nombre de packets : " + str(len(self.packets))
-                )
-
+                logger.info("Capture PCAP chargée : " + str(self.pcap_path))
+                logger.info("Nombre de packets : " + str(len(self.packets)))
             else:
-                logger.info(
-                    "Interface sélectionnée : " + str(self.interface)
-                )
+                logger.info("Interface sélectionnée : " + str(self.interface))
 
         except Exception as e:
-            logger.error(
-                "Erreur lors du chargement : " + str(e)
-            )
+            logger.error("Erreur lors du chargement : " + str(e))
+            raise
 
-    def sort_network_protocols(self):
-        """
-        Compter les différents protocoles
-        """
-
+    def sort_network_protocols(self) -> str:
+        """Compter les différents protocoles."""
         tcp = 0
         udp = 0
         icmp = 0
@@ -60,60 +45,60 @@ class Capture:
         ip = 0
         dns = 0
         http = 0
+        ethernet = 0
 
         for packet in self.packets:
+            if Ether in packet:
+                ethernet += 1
 
             if TCP in packet:
-                tcp = tcp + 1
+                tcp += 1
 
-                if (
-                    packet[TCP].sport == 80
-                    or packet[TCP].dport == 80
-                ):
-                    http = http + 1
+                if packet[TCP].sport == 80 or packet[TCP].dport == 80:
+                    http += 1
 
             if UDP in packet:
-                udp = udp + 1
+                udp += 1
 
             if ICMP in packet:
-                icmp = icmp + 1
+                icmp += 1
 
             if ARP in packet:
-                arp = arp + 1
+                arp += 1
 
             if IP in packet:
-                ip = ip + 1
+                ip += 1
 
             if DNS in packet:
-                dns = dns + 1
+                dns += 1
 
         self.protocol_counts = {
+            "Ethernet": ethernet,
+            "ARP": arp,
+            "IP": ip,
             "TCP": tcp,
             "UDP": udp,
             "ICMP": icmp,
-            "ARP": arp,
-            "IP": ip,
             "DNS": dns,
-            "HTTP": http
+            "HTTP": http,
         }
 
-        resultat = "TCP: " + str(tcp)
-        resultat += " UDP: " + str(udp)
-        resultat += " ICMP: " + str(icmp)
+        resultat = "Ethernet: " + str(ethernet)
         resultat += " ARP: " + str(arp)
         resultat += " IP: " + str(ip)
+        resultat += " TCP: " + str(tcp)
+        resultat += " UDP: " + str(udp)
+        resultat += " ICMP: " + str(icmp)
         resultat += " DNS: " + str(dns)
         resultat += " HTTP: " + str(http)
 
         return resultat
 
-    def get_all_protocols(self):
-        """
-        Récupérer les protocoles présents
-        """
-
+    def get_all_protocols(self) -> str:
+        """Récupérer les protocoles présents."""
         resultat = ""
 
+        ethernet_trouver = False
         tcp_trouver = False
         udp_trouver = False
         icmp_trouver = False
@@ -123,14 +108,13 @@ class Capture:
         http_trouver = False
 
         for packet in self.packets:
+            if Ether in packet:
+                ethernet_trouver = True
 
             if TCP in packet:
                 tcp_trouver = True
 
-                if (
-                    packet[TCP].sport == 80
-                    or packet[TCP].dport == 80
-                ):
+                if packet[TCP].sport == 80 or packet[TCP].dport == 80:
                     http_trouver = True
 
             if UDP in packet:
@@ -148,6 +132,15 @@ class Capture:
             if DNS in packet:
                 dns_trouver = True
 
+        if ethernet_trouver:
+            resultat += "Ethernet "
+
+        if arp_trouver:
+            resultat += "ARP "
+
+        if ip_trouver:
+            resultat += "IP "
+
         if tcp_trouver:
             resultat += "TCP "
 
@@ -157,12 +150,6 @@ class Capture:
         if icmp_trouver:
             resultat += "ICMP "
 
-        if arp_trouver:
-            resultat += "ARP "
-
-        if ip_trouver:
-            resultat += "IP "
-
         if dns_trouver:
             resultat += "DNS "
 
@@ -171,19 +158,13 @@ class Capture:
 
         return resultat
 
-    def analyse(self, protocols=None):
-        """
-        Analyser le trafic et détecter les attaques
-        """
-
-        # Eviter les doublons si analyse() est appelée plusieurs fois
+    def analyse(self, protocols: str | None = None) -> None:
+        """Analyser le trafic et détecter les attaques."""
         self.attacks = []
         self.flag = ""
 
-        # Calcul des statistiques
         self.sort_network_protocols()
 
-        # Tables utilisées pour les détections
         arp_table = {}
         scan_ports = {}
 
@@ -192,17 +173,12 @@ class Capture:
             "%27%20or%201=1",
             "union select",
             "union%20select",
-            "drop table"
+            "drop table",
         ]
 
         for packet in self.packets:
-
-            # -------------------------
             # ARP SPOOFING
-            # -------------------------
-
             if ARP in packet and packet[ARP].op == 2:
-
                 ip_source = packet[ARP].psrc
                 mac_source = packet[ARP].hwsrc
 
@@ -212,120 +188,63 @@ class Capture:
                 if mac_source not in arp_table[ip_source]:
                     arp_table[ip_source].append(mac_source)
 
-            # -------------------------
             # PORT SCAN
-            # -------------------------
+            if IP in packet and TCP in packet and packet[TCP].flags == "S":
+                ip_source = packet[IP].src
+                port_destination = packet[TCP].dport
 
-            if IP in packet and TCP in packet:
+                if ip_source not in scan_ports:
+                    scan_ports[ip_source] = []
 
-                # SYN sans ACK
-                if packet[TCP].flags == "S":
+                if port_destination not in scan_ports[ip_source]:
+                    scan_ports[ip_source].append(port_destination)
 
-                    ip_source = packet[IP].src
-                    port_destination = packet[TCP].dport
-
-                    if ip_source not in scan_ports:
-                        scan_ports[ip_source] = []
-
-                    if port_destination not in scan_ports[ip_source]:
-                        scan_ports[ip_source].append(
-                            port_destination
-                        )
-
-            # -------------------------
             # SQL INJECTION
-            # -------------------------
+            if IP in packet and TCP in packet and Raw in packet and packet[TCP].dport == 80:
+                payload = bytes(packet[Raw].load).decode("utf-8", errors="ignore")
+                payload_lower = payload.lower()
 
-            if (
-                IP in packet
-                and TCP in packet
-                and Raw in packet
-            ):
+                injection_trouvee = any(pattern in payload_lower for pattern in sqli_patterns)
 
-                # On regarde les requêtes envoyées au serveur HTTP
-                if packet[TCP].dport == 80:
+                if injection_trouvee:
+                    ip_source = packet[IP].src
 
-                    try:
-                        payload = bytes(
-                            packet[Raw].load
-                        ).decode(
-                            "utf-8",
-                            errors="ignore"
-                        )
+                    attaque = {
+                        "type": "sql_injection",
+                        "attacker": ip_source,
+                    }
 
-                        payload_lower = payload.lower()
+                    if attaque not in self.attacks:
+                        self.attacks.append(attaque)
 
-                        injection_trouvee = False
+                    # Chercher le flag dans la requête SQLi
+                    match = re.search(
+                        r"ESGI\{[^}\s]+\}",
+                        payload,
+                    )
 
-                        for pattern in sqli_patterns:
+                    if match:
+                        self.flag = match.group(0)
 
-                            if pattern in payload_lower:
-                                injection_trouvee = True
-                                break
-
-                        if injection_trouvee:
-
-                            ip_source = packet[IP].src
-
-                            attaque = {
-                                "type": "sql_injection",
-                                "attacker": ip_source
-                            }
-
-                            if attaque not in self.attacks:
-                                self.attacks.append(attaque)
-
-                            # Le flag doit provenir de la
-                            # requête SQL malveillante
-                            match = re.search(
-                                r"ESGI\{[^}\s]+\}",
-                                payload
-                            )
-
-                            if match:
-                                self.flag = match.group(0)
-
-                    except Exception as e:
-                        logger.debug(
-                            "Erreur lecture payload : " + str(e)
-                        )
-
-        # -------------------------
         # RESULTAT ARP SPOOFING
-        # -------------------------
-
-        for ip_source in arp_table:
-
-            macs = arp_table[ip_source]
-
+        for ip_source, macs in arp_table.items():
             if len(macs) > 1:
-
-                # La deuxième MAC observée remplace
-                # la première correspondance IP/MAC
                 mac_attaquant = macs[1]
 
                 attaque = {
                     "type": "arp_spoofing",
-                    "attacker": mac_attaquant
+                    "attacker": mac_attaquant,
                 }
 
                 if attaque not in self.attacks:
                     self.attacks.append(attaque)
 
-        # -------------------------
         # RESULTAT PORT SCAN
-        # -------------------------
-
-        for ip_source in scan_ports:
-
-            ports = scan_ports[ip_source]
-
-            # Beaucoup de ports différents ciblés
+        for ip_source, ports in scan_ports.items():
             if len(ports) >= 10:
-
                 attaque = {
                     "type": "port_scan",
-                    "attacker": ip_source
+                    "attacker": ip_source,
                 }
 
                 if attaque not in self.attacks:
@@ -333,31 +252,23 @@ class Capture:
 
         self.summary = self._gen_summary()
 
-    def get_summary(self):
-        """
-        Retourner le résumé
-        """
+    def get_summary(self) -> str:
+        """Retourner le résumé."""
         return self.summary
 
-    def _gen_summary(self):
-        """
-        Générer le résumé
-        """
-
+    def _gen_summary(self) -> str:
+        """Générer le résumé."""
         protocoles = self.get_all_protocols()
         nombre = self.sort_network_protocols()
 
         summary = "Protocoles trouvés : " + protocoles
         summary += "\n" + nombre
-
         summary += "\nAttaques détectées :"
 
         if len(self.attacks) == 0:
             summary += "\nAucune attaque détectée"
-
         else:
             for attaque in self.attacks:
-
                 summary += "\n- "
                 summary += attaque["type"]
                 summary += " : "
