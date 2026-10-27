@@ -1,9 +1,13 @@
+"""Module du projet TP1 IDS/IPS."""
+
+from pathlib import Path
 from unittest.mock import MagicMock
 
 from src.tp1.utils.report import Report
 
 
-def test_report_init():
+def test_report_init() -> None:
+    """Vérifie le comportement de report init."""
     capture = MagicMock()
     report = Report(capture, "test.pdf", "Test summary")
 
@@ -13,7 +17,8 @@ def test_report_init():
     assert report.title == "Rapport IDS / IPS"
 
 
-def test_concat_report():
+def test_concat_report() -> None:
+    """Vérifie le comportement de concat report."""
     report = Report(MagicMock(), "test.pdf", "Test summary")
     report.title = "Test Title"
     report.array = "Test Array"
@@ -26,7 +31,8 @@ def test_concat_report():
     assert "Test Array" in result
 
 
-def test_save(tmp_path):
+def test_save(tmp_path: Path) -> None:
+    """Vérifie le comportement de save."""
     capture = MagicMock()
     capture.protocol_counts = {"TCP": 10, "UDP": 5, "ARP": 2}
 
@@ -44,7 +50,8 @@ def test_save(tmp_path):
         assert f.read(4) == b"%PDF"
 
 
-def test_generate_graph():
+def test_generate_graph() -> None:
+    """Vérifie le comportement de generate graph."""
     report = Report(MagicMock(), "test.pdf", "Test summary")
 
     report.generate("graph")
@@ -52,7 +59,8 @@ def test_generate_graph():
     assert report.graph is True
 
 
-def test_generate_array():
+def test_generate_array() -> None:
+    """Vérifie le comportement de generate array."""
     capture = MagicMock()
     capture.protocol_counts = {"TCP": 5, "UDP": 2}
 
@@ -63,7 +71,8 @@ def test_generate_array():
     assert "UDP" in report.array
 
 
-def test_generate_invalid_param():
+def test_generate_invalid_param() -> None:
+    """Vérifie le comportement de generate invalid param."""
     report = Report(MagicMock(), "test.pdf", "Test summary")
 
     report.generate("invalid")
@@ -72,14 +81,16 @@ def test_generate_invalid_param():
     assert report.array == ""
 
 
-def test_get_stats():
+def test_get_stats() -> None:
+    """Vérifie le comportement de get stats."""
     capture = MagicMock()
     capture.protocol_counts = {"Ethernet": 3, "TCP": 2}
     report = Report(capture, "test.pdf", "Résumé")
     assert report.get_stats() == {"Ethernet": 3, "TCP": 2}
 
 
-def test_save_uses_requested_filename(tmp_path):
+def test_save_uses_requested_filename(tmp_path: Path) -> None:
+    """Vérifie le comportement de save uses requested filename."""
     capture = MagicMock()
     capture.protocol_counts = {"Ethernet": 2, "TCP": 1}
     report = Report(capture, "old.pdf", "Résumé")

@@ -1,3 +1,6 @@
+"""Module du projet TP1 IDS/IPS."""
+
+from pathlib import Path
 from unittest.mock import patch
 
 from scapy.all import ARP, IP, TCP, Ether, Raw
@@ -5,7 +8,8 @@ from scapy.all import ARP, IP, TCP, Ether, Raw
 from src.tp1.utils.capture import Capture
 
 
-def test_capture_init():
+def test_capture_init() -> None:
+    """Vérifie le comportement de capture init."""
     capture = Capture(pcap_path="test.pcap")
 
     assert capture.pcap_path == "test.pcap"
@@ -14,7 +18,8 @@ def test_capture_init():
     assert capture.attacks == []
 
 
-def test_capture_traffic(tmp_path):
+def test_capture_traffic(tmp_path: Path) -> None:
+    """Vérifie le comportement de capture traffic."""
     from scapy.all import wrpcap
 
     fichier = tmp_path / "test.pcap"
@@ -27,7 +32,8 @@ def test_capture_traffic(tmp_path):
     assert len(capture.packets) == 1
 
 
-def test_sort_network_protocols():
+def test_sort_network_protocols() -> None:
+    """Vérifie le comportement de sort network protocols."""
     capture = Capture(pcap_path="test.pcap")
 
     capture.packets = [
@@ -45,7 +51,8 @@ def test_sort_network_protocols():
     assert "TCP: 2" in result
 
 
-def test_get_all_protocols():
+def test_get_all_protocols() -> None:
+    """Vérifie le comportement de get all protocols."""
     capture = Capture(pcap_path="test.pcap")
     capture.packets = [Ether() / IP() / TCP(dport=80), Ether() / ARP()]
 
@@ -57,7 +64,8 @@ def test_get_all_protocols():
     assert "HTTP" in result
 
 
-def test_analyse():
+def test_analyse() -> None:
+    """Vérifie le comportement de analyse."""
     capture = Capture(pcap_path="test.pcap")
 
     with patch.object(capture, "_gen_summary", return_value="Test summary"):
@@ -67,14 +75,16 @@ def test_analyse():
     assert capture.attacks == []
 
 
-def test_get_summary():
+def test_get_summary() -> None:
+    """Vérifie le comportement de get summary."""
     capture = Capture(pcap_path="test.pcap")
     capture.summary = "Test summary"
 
     assert capture.get_summary() == "Test summary"
 
 
-def test_gen_summary():
+def test_gen_summary() -> None:
+    """Vérifie le comportement de gen summary."""
     capture = Capture(pcap_path="test.pcap")
 
     result = capture._gen_summary()
@@ -84,7 +94,8 @@ def test_gen_summary():
     assert "Flag" in result
 
 
-def test_detect_port_scan():
+def test_detect_port_scan() -> None:
+    """Vérifie le comportement de detect port scan."""
     capture = Capture(pcap_path="test.pcap")
 
     for port in range(20, 35):
@@ -96,7 +107,7 @@ def test_detect_port_scan():
     assert {"type": "port_scan", "attacker": "10.0.0.5"} in capture.attacks
 
 
-def test_detect_arp_spoofing():
+def test_detect_arp_spoofing() -> None:
     """Détecter une MAC qui envoie davantage de réponses ARP."""
     capture = Capture(pcap_path="test.pcap")
 
@@ -135,7 +146,7 @@ def test_detect_arp_spoofing():
     } in capture.attacks
 
 
-def test_detect_arp_spoofing_attacker_first():
+def test_detect_arp_spoofing_attacker_first() -> None:
     """Détecter une MAC suspecte même si elle apparaît en premier."""
     capture = Capture(pcap_path="test.pcap")
 
@@ -174,7 +185,8 @@ def test_detect_arp_spoofing_attacker_first():
     } in capture.attacks
 
 
-def test_detect_sql_injection():
+def test_detect_sql_injection() -> None:
+    """Vérifie le comportement de detect sql injection."""
     capture = Capture(pcap_path="test.pcap")
 
     paquet = (
@@ -190,7 +202,8 @@ def test_detect_sql_injection():
     assert {"type": "sql_injection", "attacker": "10.0.0.9"} in capture.attacks
 
 
-def test_ethernet():
+def test_ethernet() -> None:
+    """Vérifie le comportement de ethernet."""
     capture = Capture(pcap_path="test.pcap")
 
     capture.packets = [

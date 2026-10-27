@@ -1,3 +1,5 @@
+"""Module du projet TP1 IDS/IPS."""
+
 import re
 from collections import Counter, defaultdict
 
@@ -8,7 +10,10 @@ from tp1.utils.lib import choose_interface
 
 
 class Capture:
+    """Classe Capture du projet IDS/IPS."""
+
     def __init__(self, pcap_path: str | None = None) -> None:
+        """Initialise la capture réseau et les données d'analyse."""
         self.pcap_path = pcap_path
         self.interface = None
 

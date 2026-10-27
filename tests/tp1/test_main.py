@@ -1,11 +1,15 @@
+"""Module du projet TP1 IDS/IPS."""
+
 import json
 import sys
+from pathlib import Path
 from unittest.mock import patch
 
 from tp1.main import main
 
 
-def test_main(tmp_path):
+def test_main(tmp_path: Path) -> None:
+    """Vérifie le comportement de main."""
     fichier_pcap = tmp_path / "capture.pcap"
     fichier_json = tmp_path / "report.json"
 

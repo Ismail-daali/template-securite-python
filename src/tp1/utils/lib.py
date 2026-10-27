@@ -1,3 +1,6 @@
+"""Module du projet TP1 IDS/IPS."""
+
+
 def hello_world() -> str:
     """
     Hello world function

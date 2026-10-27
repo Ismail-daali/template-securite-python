@@ -1,3 +1,5 @@
+"""Module du projet TP1 IDS/IPS."""
+
 import argparse
 import json
 
@@ -7,6 +9,7 @@ from tp1.utils.report import Report
 
 
 def main() -> None:
+    """Analyser un fichier PCAP et générer les rapports JSON et PDF."""
     parser = argparse.ArgumentParser(description="TP1 IDS/IPS")
 
     parser.add_argument("--pcap", required=True)

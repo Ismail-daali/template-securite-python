@@ -1,3 +1,5 @@
+"""Module du projet TP1 IDS/IPS."""
+
 from fpdf import FPDF
 
 from tp1.utils.capture import Capture
@@ -7,12 +9,13 @@ class Report:
     """Construit un rapport PDF à partir des résultats de Capture."""
 
     def __init__(self, capture: Capture, filename: str, summary: str) -> None:
-        self.capture = capture
-        self.filename = filename
-        self.title = "Rapport IDS / IPS"
-        self.summary = summary
-        self.array = ""
-        self.graph = False
+        """Initialise ou exécute __init__."""
+        self.capture: Capture = capture
+        self.filename: str = filename
+        self.title: str = "Rapport IDS / IPS"
+        self.summary: str = summary
+        self.array: str = ""
+        self.graph: bool = False
 
     def get_stats(self) -> dict[str, int]:
         """Utilise les mêmes statistiques que le rapport JSON."""
