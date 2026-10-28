@@ -1,0 +1,23 @@
+# TP3 - cible « breach » à lancer EN LOCAL pour développer votre exploit.
+#
+#   docker load -i tp3-target.tar.gz     (image téléchargée depuis la page du TP3)
+#   docker compose up
+#   Web : http://localhost:8080   (endpoint caché à trouver par fuzzing)
+#   TCP : localhost:9090          (révélé pendant le challenge)
+#
+# Le drapeau ci-dessous est FACTICE : il ne sert qu'au développement local.
+# Le VRAI drapeau, propre à votre binôme, s'obtient sur l'instance HÉBERGÉE
+# (bouton « démarrer l'instance » du TP3) : personnelle, sur des ports aléatoires,
+# éphémère (5 min) et limitée (3/h par étudiant).
+services:
+  target:
+    image: ${TP3_TARGET_IMAGE:-tp3-target:latest}
+    environment:
+      GROUP_SEED: ${GROUP_SEED:-dev}
+      TP3_FLAG1: "ESGI{web_dev-local-flag}"
+      TP3_FINAL: "ESGI{chain_dev-local-flag}"
+      PUBLIC_HOST: ${PUBLIC_HOST:-127.0.0.1}
+      TCP_PUBLIC_PORT: ${TCP_PUBLIC_PORT:-9090}
+    ports:
+      - "8080:8080"
+      - "9090:9090"
