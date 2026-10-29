@@ -1,3 +1,4 @@
+internal-panel
 robots.txt
 sitemap.xml
 captcha

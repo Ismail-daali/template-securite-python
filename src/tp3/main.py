@@ -1,82 +1,141 @@
 
 import argparse
+import base64
+import socket
 from pathlib import Path
+from urllib.parse import urljoin
 
 import requests
 
-from src.tp3.utils.config import logger, snapshot_082462
-from src.tp3.utils.session import Session, run_network
+from src.tp3.utils.config import logger
+from src.tp3.utils.session import Session
 
 
 def find_endpoint(target):
     """
-    Recherche l'endpoint caché à partir de la wordlist.
-    Affiche les réponses HTTP intéressantes.
+    Discover the hidden endpoint using the wordlist.
     """
     wordlist = Path(__file__).parent / "wordlist.txt"
 
-    with open(wordlist, "r", encoding="utf-8") as fichier:
-        mots = [
-            ligne.strip()
-            for ligne in fichier
-            if ligne.strip() and not ligne.startswith("#")
-        ]
-
-    logger.info("Nombre de chemins à tester : %s", len(mots))
-
-    for numero, mot in enumerate(mots, start=1):
-        url = target + "/" + mot.lstrip("/")
-
-        logger.info(
-            "[%s/%s] Test de : %s",
-            numero,
-            len(mots),
-            url
+    if not wordlist.is_file():
+        raise FileNotFoundError(
+            f"Wordlist introuvable : {wordlist}"
         )
 
-        try:
-            reponse = requests.get(
-                url,
-                timeout=5,
-                allow_redirects=True
+    with wordlist.open("r", encoding="utf-8") as file:
+        paths = [
+            line.strip()
+            for line in file
+            if line.strip()
+            and not line.lstrip().startswith("#")
+        ]
+
+    logger.info(
+        "Fuzzing de %d chemins",
+        len(paths)
+    )
+
+    with requests.Session() as http:
+        for path in paths:
+            url = urljoin(
+                target.rstrip("/") + "/",
+                path.lstrip("/")
             )
 
-            logger.info(
-                "Statut HTTP : %s",
-                reponse.status_code
-            )
+            try:
+                response = http.get(
+                    url,
+                    timeout=3,
+                    allow_redirects=False
+                )
+            except requests.RequestException as error:
+                logger.warning(
+                    "Erreur HTTP sur %s : %s",
+                    url,
+                    error
+                )
+                continue
 
-        except requests.RequestException as erreur:
-            logger.warning(
-                "Erreur sur %s : %s",
-                url,
-                erreur
-            )
-            continue
+            if response.status_code == 200:
+                if "captcha" in response.text.lower():
+                    logger.info(
+                        "Endpoint trouvé : %s",
+                        url
+                    )
+                    return url
 
-        # Afficher tous les endpoints potentiels
-        if reponse.status_code != 404:
-            logger.info(
-                "Endpoint potentiel : %s (HTTP %s)",
-                url,
-                reponse.status_code
-            )
-
-            logger.debug(
-                "Contenu : %s",
-                reponse.text[:300]
-            )
-
-        # Vérifier si la page contient un CAPTCHA
-        if (
-            reponse.status_code == 200
-            and "captcha" in reponse.text.lower()
-        ):
-            logger.info("Endpoint CAPTCHA trouvé : %s", url)
-            return url
-
-    logger.error("Aucun endpoint CAPTCHA trouvé")
     return None
+
+
+def xor_decode(data, key):
+    """
+    Decode data using a repeating XOR key.
+    """
+    return bytes(
+        byte ^ key[index % len(key)]
+        for index, byte in enumerate(data)
+    )
+
+
+def run_network(host, port, key_hex):
+    """
+    Solve the TCP challenge.
+    """
+    key = bytes.fromhex(key_hex)
+
+    if not key:
+        raise ValueError("Clé XOR vide")
+
+    with socket.create_connection(
+        (host, int(port)),
+        timeout=5
+    ) as connection:
+
+        connection.settimeout(5)
+
+        with connection.makefile("rb") as reader:
+            introduction = reader.readline()
+            logger.info(
+                "TCP : %s",
+                introduction.decode(
+                    errors="replace"
+                ).strip()
+            )
+
+            for round_number in range(1, 4):
+                encoded = reader.readline().strip()
+
+                if not encoded:
+                    raise RuntimeError(
+                        "Connexion TCP interrompue"
+                    )
+
+                decoded = base64.b64decode(
+                    encoded,
+                    validate=True
+                )
+
+                plaintext = xor_decode(decoded, key)
+
+                connection.sendall(
+                    plaintext + b"\n"
+                )
+
+                logger.info(
+                    "Round TCP %d terminé",
+                    round_number
+                )
+
+            final_response = reader.readline().decode(
+                errors="replace"
+            ).strip()
+
+    if not final_response.startswith("OK "):
+        raise RuntimeError(
+            f"Réponse TCP inattendue : {final_response}"
+        )
+
+    return final_response[3:]
 
 
 def main():
@@ -87,70 +146,82 @@ def main():
     parser.add_argument(
         "--target",
         required=True,
-        help="Adresse de la cible"
+        help="URL HTTP de la cible"
     )
 
     args = parser.parse_args()
-
-    snapshot_082462(args.target)
 
     logger.info("Starting TP3")
 
     target = args.target.rstrip("/")
 
-    logger.info("Cible : %s", target)
-    logger.info("Recherche de l'endpoint...")
+    endpoint = find_endpoint(target)
 
-    url = find_endpoint(target)
-
-    if url is None:
-        logger.error("Aucun endpoint trouvé")
+    if endpoint is None:
+        logger.error(
+            "Aucun endpoint CAPTCHA trouvé"
+        )
         return
 
-    logger.info("Initialisation de la session...")
+    session = Session(endpoint)
 
-    session = Session(url)
-    essais = 0
-
-    while True:
+    for attempt in range(1, 31):
         logger.info(
-            "Tentative CAPTCHA : %s",
-            essais + 1
+            "Tentative CAPTCHA %d/30",
+            attempt
         )
 
-        session.prepare_request()
-        session.submit_request()
+        try:
+            session.prepare_request()
 
-        if session.process_response():
-            break
+            logger.info(
+                "CAPTCHA reconnu : %s",
+                session.captcha_value
+            )
 
-        essais += 1
+            if len(session.captcha_value) != 5:
+                continue
 
-        if essais > 30:
-            logger.error("CAPTCHA non résolu")
-            return
+            session.submit_request()
 
-    logger.info("Smell good !")
+            if session.process_response():
+                break
 
-    flag1 = session.get_flag()
+        except (
+            requests.RequestException,
+            ValueError
+        ) as error:
+            logger.warning(
+                "Erreur CAPTCHA : %s",
+                error
+            )
 
-    logger.info("Flag for %s : %s", url, flag1)
-
-    print(f"[+] FLAG1: {flag1}")
-
-    if not session.host or not session.key:
-        logger.error("Host ou clé introuvable")
+    else:
+        logger.error(
+            "Impossible de résoudre le CAPTCHA"
+        )
         return
 
-    logger.info("Démarrage de la communication réseau...")
+    print(f"[+] FLAG1: {session.get_flag()}")
 
-    drapeau_final = run_network(
-        session.host,
-        session.port,
-        session.key.encode()
-    )
+    try:
+        final_flag = run_network(
+            session.host,
+            session.port,
+            session.key
+        )
+    except (
+        OSError,
+        ValueError,
+        RuntimeError
+    ) as error:
+        logger.error(
+            "Erreur TCP : %s",
+            error
+        )
+        return
 
-    print(f"[+] FLAG_FINAL: {drapeau_final}")
+    print(f"[+] FLAG_FINAL: {final_flag}")
 
 
 if __name__ == "__main__":
